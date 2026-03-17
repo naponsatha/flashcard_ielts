@@ -2,10 +2,28 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "flashcard",
+      "name": "flashcard-ielts",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "-p", "8765", "."],
+      "runtimeArgs": ["serve", "-p", "8765", "/Users/napon.satha/Desktop/PROJECT/claudecode/Flashcard"],
       "port": 8765
+    },
+    {
+      "name": "grammar-flashcard",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "8766", "/Users/napon.satha/Desktop/PROJECT/claudecode/Flashcard"],
+      "port": 8766
+    },
+    {
+      "name": "app-quotation-frontend",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "3000", "/Users/napon.satha/Desktop/PROJECT/claudecode/app_quotation/frontend"],
+      "port": 3000
+    },
+    {
+      "name": "app-quotation-backend",
+      "runtimeExecutable": "uvicorn",
+      "runtimeArgs": ["app.main:app", "--reload", "--port", "8000"],
+      "port": 8000
     }
   ]
 }

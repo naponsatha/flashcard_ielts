@@ -383,7 +383,6 @@
     .scene {
       width: 100%;
       height: 300px;
-      perspective: 1400px;
       cursor: pointer;
       margin-bottom: 16px;
     }
@@ -391,15 +390,11 @@
       width: 100%;
       height: 100%;
       position: relative;
-      transform-style: preserve-3d;
-      transition: transform .45s cubic-bezier(.4,0,.2,1);
     }
-    .card.flipped { transform: rotateY(180deg); }
 
     .card-face {
       position: absolute;
       inset: 0;
-      backface-visibility: hidden;
       border-radius: var(--radius);
       border: 1px solid var(--border);
       background: var(--surface);
@@ -409,7 +404,9 @@
       justify-content: center;
       gap: 10px;
     }
-    .card-back { transform: rotateY(180deg); }
+    .card-back { display: none; }
+    .card.flipped .card-front { display: none; }
+    .card.flipped .card-back  { display: flex; }
 
     .pos-tag { font-size: .7rem; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; font-weight: 500; }
     .word { font-size: 2.8rem; font-weight: 700; line-height: 1; letter-spacing: -.5px; }
@@ -1581,6 +1578,17 @@ function showTab(tab) {
 // RENDER CARD
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function renderCard(card) {
+  const cardEl = document.getElementById('card');
+
+  // Reset to front immediately (no animation)
+  isFlipped = false;
+  cardEl.classList.remove('flipped');
+  document.getElementById('actions').style.display = 'none';
+  document.getElementById('btn-flip').classList.add('visible');
+  document.getElementById('btn-flip-back').classList.remove('visible');
+  document.getElementById('note-textarea').value = '';
+  document.getElementById('note-saved-indicator').textContent = '';
+
   document.getElementById('pos').textContent        = card.pos;
   document.getElementById('word').textContent       = card.word;
   document.getElementById('topic-tag').textContent  = card.topic || '';
@@ -1599,14 +1607,6 @@ function renderCard(card) {
     el.textContent = card.dueDate === 0 ? 'New' : '';
     el.className   = 'next-review';
   }
-
-  isFlipped = false;
-  document.getElementById('card').classList.remove('flipped');
-  document.getElementById('actions').style.display = 'none';
-  document.getElementById('btn-flip').classList.add('visible');
-  document.getElementById('btn-flip-back').classList.remove('visible');
-  document.getElementById('note-textarea').value = '';
-  document.getElementById('note-saved-indicator').textContent = '';
 
   const total = queue.length + sessionDone.length;
   const done  = sessionDone.length;
