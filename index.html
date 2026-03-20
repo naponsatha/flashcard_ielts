@@ -705,7 +705,7 @@
     <!-- Active goal display -->
     <div class="goal-active-bar" id="goal-active-bar" style="display:none">
       <div class="gab-left">เป้าที่ตั้งไว้</div>
-      <div><span class="gab-val" id="gab-val">15</span><span class="gab-unit" id="gab-unit">คำ/วัน</span></div>
+      <div><span class="gab-val" id="gab-val">10</span><span class="gab-unit"> คำใหม่ + </span><span class="gab-val" id="gab-review-val">20</span><span class="gab-unit"> ทบทวน/วัน</span></div>
       <button class="btn-goal-save" onclick="clearGoal()">เปลี่ยน</button>
     </div>
     <!-- Mode selector -->
@@ -713,14 +713,20 @@
       <button class="goal-mode-tab active" id="tab-by-words" onclick="switchGoalMode('words')">กำหนดคำ/วัน</button>
       <button class="goal-mode-tab"        id="tab-by-days"  onclick="switchGoalMode('days')">กำหนดจำนวนวัน</button>
     </div>
-    <!-- Input row -->
+    <!-- Input row: new cards -->
     <div class="goal-input-row" id="goal-input-row">
-      <span class="goal-input-label" id="goal-input-label-pre">ท่องวันละ</span>
-      <input class="goal-input" type="number" id="goal-num-input" min="1" max="500" placeholder="15" />
+      <span class="goal-input-label" id="goal-input-label-pre">คำใหม่วันละ</span>
+      <input class="goal-input" type="number" id="goal-num-input" min="1" max="500" placeholder="10" />
       <span class="goal-input-label" id="goal-input-label-post">คำ/วัน</span>
-      <button class="btn-goal-save" onclick="calcGoal()">คำนวณ</button>
     </div>
-    <div class="goal-result" id="goal-result">กรอกตัวเลขแล้วกด "คำนวณ"</div>
+    <!-- Input row: reviews -->
+    <div class="goal-input-row" id="goal-review-input-row">
+      <span class="goal-input-label">ทบทวนสูงสุด</span>
+      <input class="goal-input" type="number" id="goal-review-input" min="1" max="500" placeholder="20" />
+      <span class="goal-input-label">ใบ/วัน</span>
+      <button class="btn-goal-save" onclick="applyGoalDirect()">บันทึก</button>
+    </div>
+    <div class="goal-result" id="goal-result" style="display:none"></div>
     <button class="btn-goal-apply" id="btn-goal-apply" style="display:none;margin-top:10px;width:100%" onclick="applyGoal()">✓ ใช้ค่านี้</button>
   </div>
 
@@ -1420,7 +1426,8 @@ function shuffle(a) {
 
 function buildQueue() {
   const now   = Date.now();
-  const limit = getDailyLimit();
+  const newLimit    = getNewLimit();
+  const reviewLimit = getReviewLimit();
 
   // Split into review (dueDate set, overdue) and new (dueDate===0)
   const reviews = allCards.filter(c => c.dueDate > 0 && c.dueDate <= now);
@@ -1430,13 +1437,19 @@ function buildQueue() {
   const s = getStore();
   const todayNewKey = 'newToday_' + todayStr();
   const newSeenToday = (s[todayNewKey] || 0);
-  const newSlots = Math.max(0, limit - newSeenToday);
+  const newSlots = Math.max(0, newLimit - newSeenToday);
+
+  // How many reviews have already been done today?
+  const todayReviewKey = 'reviewToday_' + todayStr();
+  const reviewsDoneToday = (s[todayReviewKey] || 0);
+  const reviewSlots = Math.max(0, reviewLimit - reviewsDoneToday);
 
   shuffle(reviews);
   shuffle(newCards);
 
-  const todaysNew = newCards.slice(0, newSlots);
-  const combined  = [...reviews, ...todaysNew];
+  const todaysNew     = newCards.slice(0, newSlots);
+  const todaysReviews = reviews.slice(0, reviewSlots);
+  const combined      = [...todaysReviews, ...todaysNew];
   shuffle(combined);
   return combined;
 }
@@ -1444,6 +1457,12 @@ function buildQueue() {
 function recordNewCardToday() {
   const s = getStore();
   const key = 'newToday_' + todayStr();
+  s[key] = (s[key] || 0) + 1;
+  saveStorage(s);
+}
+function recordReviewToday() {
+  const s = getStore();
+  const key = 'reviewToday_' + todayStr();
   s[key] = (s[key] || 0) + 1;
   saveStorage(s);
 }
@@ -1477,18 +1496,22 @@ function renderDashboard() {
   document.getElementById('db-streak').innerHTML =
     `${streak}<span class="unit">วัน</span>`;
 
-  // Today status — respect daily limit
-  const limit       = getDailyLimit();
-  const reviewsDue  = allCards.filter(c => c.dueDate > 0 && c.dueDate <= now).length;
-  const s2          = getStore();
-  const newSeenToday2 = (s2['newToday_' + today] || 0);
-  const newSlots    = Math.max(0, limit - newSeenToday2);
-  const newAvail    = allCards.filter(c => c.dueDate === 0).length;
-  const newToday    = Math.min(newSlots, newAvail);
-  const todayDue    = reviewsDue + newToday;
+  // Today status — respect daily limits
+  const newLimit2      = getNewLimit();
+  const reviewLimit2   = getReviewLimit();
+  const reviewsDue     = allCards.filter(c => c.dueDate > 0 && c.dueDate <= now).length;
+  const s2             = getStore();
+  const newSeenToday2  = (s2['newToday_' + today] || 0);
+  const reviewsDoneToday2 = (s2['reviewToday_' + today] || 0);
+  const newSlots       = Math.max(0, newLimit2 - newSeenToday2);
+  const reviewSlots2   = Math.max(0, reviewLimit2 - reviewsDoneToday2);
+  const newAvail       = allCards.filter(c => c.dueDate === 0).length;
+  const newToday       = Math.min(newSlots, newAvail);
+  const reviewToday    = Math.min(reviewSlots2, reviewsDue);
+  const todayDue       = reviewToday + newToday;
   const playedToday = !!days[today];
   document.getElementById('db-today-due').textContent =
-    `วันนี้ ${reviewsDue > 0 ? reviewsDue + ' ทบทวน' : ''}${reviewsDue > 0 && newToday > 0 ? ' + ' : ''}${newToday > 0 ? newToday + ' คำใหม่' : ''} (${todayDue} ใบ)`;
+    `วันนี้ ${reviewToday > 0 ? reviewToday + ' ทบทวน' : ''}${reviewToday > 0 && newToday > 0 ? ' + ' : ''}${newToday > 0 ? newToday + ' คำใหม่' : ''} (${todayDue} ใบ)`;
   const badge = document.getElementById('db-today-badge');
   if (playedToday) {
     badge.textContent = 'เล่นแล้ว ✓';
@@ -1671,6 +1694,7 @@ function rate(r) {
   recordReviewInStore(r);
   recordTodayInStore();
   if (wasNew && r !== 1) recordNewCardToday();
+  else if (!wasNew && r !== 1) recordReviewToday();
   updateSessionStats();
   updateDueChips();
 
@@ -1763,10 +1787,11 @@ function flipBack() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// GOAL SETTING  (daily new-card limit)
+// GOAL SETTING  (daily new-card + review limit)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const GOAL_KEY      = 'ielts_goal_v2';   // { wordsPerDay, mode }
-const DEFAULT_LIMIT = 15;                 // fallback if no goal set
+const GOAL_KEY         = 'ielts_goal_v3';   // { wordsPerDay, reviewsPerDay, mode }
+const DEFAULT_NEW_LIMIT    = 10;
+const DEFAULT_REVIEW_LIMIT = 20;
 
 let _goalMode = 'words'; // 'words' | 'days'
 let _pendingWordsPerDay = null;
@@ -1779,18 +1804,20 @@ function loadGoalData() {
 function saveGoalData(obj) {
   localStorage.setItem(GOAL_KEY, JSON.stringify(obj));
 }
-function getDailyLimit() {
+function getNewLimit() {
   const g = loadGoalData();
-  return (g && g.wordsPerDay > 0) ? g.wordsPerDay : DEFAULT_LIMIT;
+  return (g && g.wordsPerDay > 0) ? g.wordsPerDay : DEFAULT_NEW_LIMIT;
 }
+function getReviewLimit() {
+  const g = loadGoalData();
+  return (g && g.reviewsPerDay > 0) ? g.reviewsPerDay : DEFAULT_REVIEW_LIMIT;
+}
+// backward-compat alias
+function getDailyLimit() { return getNewLimit(); }
 
 // ── mode switch ──
 function switchGoalMode(mode) {
   _goalMode = mode;
-  const total    = allCards.length;
-  const learned  = allCards.filter(c => c.dueDate > 0).length;
-  const remaining = total - learned;
-
   document.getElementById('tab-by-words').classList.toggle('active', mode === 'words');
   document.getElementById('tab-by-days').classList.toggle('active',  mode === 'days');
 
@@ -1799,74 +1826,38 @@ function switchGoalMode(mode) {
   const input     = document.getElementById('goal-num-input');
 
   if (mode === 'words') {
-    labelPre.textContent  = 'ท่องวันละ';
+    labelPre.textContent  = 'คำใหม่วันละ';
     labelPost.textContent = 'คำ/วัน';
-    input.max = 500; input.placeholder = '15';
+    input.max = 500; input.placeholder = '10';
   } else {
     labelPre.textContent  = 'ครบภายใน';
     labelPost.textContent = 'วัน';
     input.max = 3650; input.placeholder = '100';
   }
   input.value = '';
-  document.getElementById('goal-result').textContent = 'กรอกตัวเลขแล้วกด "คำนวณ"';
-  document.getElementById('btn-goal-apply').style.display = 'none';
-  _pendingWordsPerDay = null;
 }
 
-// ── calculate ──
-function calcGoal() {
-  const total    = allCards.length;
-  const learned  = allCards.filter(c => c.dueDate > 0).length;
-  const remaining = total - learned;
-  const val = parseInt(document.getElementById('goal-num-input').value);
-  const el  = document.getElementById('goal-result');
+// ── apply directly from inputs ──
+function applyGoalDirect() {
+  const newVal    = parseInt(document.getElementById('goal-num-input').value);
+  const reviewVal = parseInt(document.getElementById('goal-review-input').value);
 
-  if (!val || val < 1) {
-    el.textContent = 'กรอกตัวเลขให้ถูกต้องก่อนนะครับ';
-    document.getElementById('btn-goal-apply').style.display = 'none';
-    return;
-  }
+  const wordsPerDay   = (newVal > 0)    ? newVal    : DEFAULT_NEW_LIMIT;
+  const reviewsPerDay = (reviewVal > 0) ? reviewVal : DEFAULT_REVIEW_LIMIT;
 
-  let wordsPerDay, days;
-
-  if (_goalMode === 'words') {
-    // user typed words/day directly
-    wordsPerDay = Math.min(val, remaining > 0 ? remaining : total);
-    days = remaining > 0 ? Math.ceil(remaining / wordsPerDay) : 0;
-  } else {
-    // user typed number of days → calculate words/day
-    days = val;
-    wordsPerDay = remaining > 0 ? Math.ceil(remaining / days) : DEFAULT_LIMIT;
-  }
-
-  _pendingWordsPerDay = wordsPerDay;
-  const reviewEst  = Math.round(wordsPerDay * 1.5);
-  const totalPerDay = wordsPerDay + reviewEst;
-
-  if (remaining === 0) {
-    el.innerHTML = '🎉 คุณท่องครบทุกคำแล้ว!';
-    document.getElementById('btn-goal-apply').style.display = 'none';
-    return;
-  }
-
-  el.innerHTML =
-    `วันละ <span class="goal-num">${wordsPerDay}</span> คำใหม่` +
-    ` + ทบทวน ~<span class="goal-num">${reviewEst}</span> ใบ` +
-    ` = <span class="goal-num">${totalPerDay}</span> ใบ/วัน` +
-    `<br>ครบ ${remaining} คำที่เหลือใน <strong>${days} วัน</strong>` +
-    (days <= 730 ? ` (~${(days/30).toFixed(1)} เดือน)` : '');
-
-  document.getElementById('btn-goal-apply').style.display = 'block';
-}
-
-// ── apply ──
-function applyGoal() {
-  if (!_pendingWordsPerDay) return;
-  saveGoalData({ wordsPerDay: _pendingWordsPerDay });
-  document.getElementById('btn-goal-apply').style.display = 'none';
+  saveGoalData({ wordsPerDay, reviewsPerDay });
   initGoalUI();
-  // refresh dashboard counts
   renderDashboard();
+}
+
+// ── apply (legacy, unused) ──
+function applyGoal() {
+  applyGoalDirect();
+}
+
+// ── calculate (days mode helper, kept for tab-by-days UX) ──
+function calcGoal() {
+  applyGoalDirect();
 }
 
 // ── clear ──
@@ -1878,27 +1869,28 @@ function clearGoal() {
 // ── init UI ──
 function initGoalUI() {
   const g = loadGoalData();
-  const activeBar   = document.getElementById('goal-active-bar');
-  const modeTabs    = document.getElementById('goal-mode-tabs');
-  const inputRow    = document.getElementById('goal-input-row');
-  const resultEl    = document.getElementById('goal-result');
+  const activeBar      = document.getElementById('goal-active-bar');
+  const modeTabs       = document.getElementById('goal-mode-tabs');
+  const inputRow       = document.getElementById('goal-input-row');
+  const reviewInputRow = document.getElementById('goal-review-input-row');
+  const resultEl       = document.getElementById('goal-result');
 
   if (g && g.wordsPerDay) {
-    // show active bar
-    activeBar.style.display = 'flex';
-    modeTabs.style.display  = 'none';
-    inputRow.style.display  = 'none';
-    resultEl.style.display  = 'none';
+    activeBar.style.display      = 'flex';
+    modeTabs.style.display       = 'none';
+    inputRow.style.display       = 'none';
+    reviewInputRow.style.display = 'none';
+    resultEl.style.display       = 'none';
     document.getElementById('btn-goal-apply').style.display = 'none';
-    document.getElementById('gab-val').textContent  = g.wordsPerDay;
-    document.getElementById('gab-unit').textContent = ' คำ/วัน';
+    document.getElementById('gab-val').textContent        = g.wordsPerDay;
+    document.getElementById('gab-review-val').textContent = g.reviewsPerDay || DEFAULT_REVIEW_LIMIT;
   } else {
-    activeBar.style.display = 'none';
-    modeTabs.style.display  = 'flex';
-    inputRow.style.display  = 'flex';
-    resultEl.style.display  = 'block';
-    resultEl.textContent    = 'กรอกตัวเลขแล้วกด "คำนวณ"';
-    _pendingWordsPerDay     = null;
+    activeBar.style.display      = 'none';
+    modeTabs.style.display       = 'flex';
+    inputRow.style.display       = 'flex';
+    reviewInputRow.style.display = 'flex';
+    resultEl.style.display       = 'none';
+    _pendingWordsPerDay          = null;
   }
 }
 
